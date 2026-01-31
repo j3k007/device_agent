@@ -12,7 +12,7 @@ pub fn collect_basic_info() -> SystemInfo{
         cpu_info: get_cpu_info(&sys),
         memory_total: sys.total_memory(),
         memory_available: sys.available_memory(),
-        ip_addresses: Vec::new(),
+        ip_addresses: get_ip_address(),
     }
 }
 
@@ -31,4 +31,15 @@ fn get_os_version(sys: &System) -> String{
 
 fn get_cpu_info(sys: &System) -> String{
     sys.cpus().first().map(|cpu| cpu.brand().to_string()).unwrap_or_else(|| "Unknown".to_string())
+}
+
+fn get_ip_address() -> Vec<String>{
+    use local_ip_address::list_afinet_netifas;
+    let network_interfaces = list_afinet_netifas();
+    match network_interfaces {
+        Ok(interfaces) => {
+            interfaces.iter().map(|(_, ip)| ip.to_string()).collect()
+        },
+        Err(_) => Vec::new(),
+    }
 }
