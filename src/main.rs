@@ -1,15 +1,17 @@
 mod models;
 mod collector;
 mod config;
+mod retry;
 
 use collector::collect_all_info;
 use config::Config;
+use retry::retry_with_backoff;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
 use std::fs;
-use log::{info, error, warn};
+use log::{info, error, warn, debug};
 
 fn main() {
     // Load configuration
@@ -58,65 +60,69 @@ fn main() {
 
     // Main collection loop
     let mut iteration = 0;
-    
+    let mut iteration = 0;
+    let mut successful_collections = 0;
+    let mut failed_collections = 0;
     while running.load(Ordering::SeqCst) {
         iteration += 1;
         
         info!("=== Collection Iteration #{} ===", iteration);
         
-        // Collect system information
-        match collect_system_data(&config) {
-            Ok(info) => {
-                info!("✓ System data collected successfully");
-                
-                // Save to file if enabled
-                if config.output.save_to_file {
-                    match save_to_file(&info, &config) {
-                        Ok(filename) => {
-                            info!("✓ Data saved to: {}", filename);
-                        }
-                        Err(e) => {
-                            error!("✗ Failed to save file: {}", e);
-                        }
-                    }
-                }
-                
-                // TODO: Send to backend (we'll add this later)
-                // send_to_backend(&info, &config)?;
+        // ✅ UPDATED: Use retry logic
+        match retry_with_backoff(
+            "collect_and_save",
+            &retry::RetryConfig {
+                max_retries: config.retry.max_retries,
+                initial_delay_ms: config.retry.initial_delay_ms,
+                max_delay_ms: config.retry.max_delay_ms,
+            },
+            || collect_and_save(&config),
+        ) {
+            Ok(_) => {
+                successful_collections += 1;
+                info!("✓ Collection and save completed successfully");
             }
             Err(e) => {
-                error!("✗ Failed to collect data: {}", e);
+                failed_collections += 1;
+                error!("✗ All retry attempts failed: {}", e);
+                warn!("Will try again in next collection cycle");
             }
         }
         
-        // Check if we should continue
+        debug!("Statistics: Total={}, Successful={}, Failed={}", 
+            iteration, successful_collections, failed_collections);
+        
         if !running.load(Ordering::SeqCst) {
             break;
         }
         
-        // Wait for next collection
         info!("Waiting {} seconds until next collection...", config.collection.interval_seconds);
         info!("");
         
-        // Sleep in small intervals to allow quick shutdown
-        let sleep_interval = 1; // Check every second
-        let total_sleep = config.collection.interval_seconds;
-        
-        for _ in 0..total_sleep {
-            if !running.load(Ordering::SeqCst) {
-                break;
-            }
-            thread::sleep(Duration::from_secs(sleep_interval));
-        }
+        sleep_with_interrupt(&running, config.collection.interval_seconds);
     }
 
     info!("=== Device Agent Stopped ===");
     info!("Total iterations: {}", iteration);
+    info!("Successful collections: {}", successful_collections);
+    info!("Failed collections: {}", failed_collections);
 }
 
-/// Collect system data with error handling
+// ✅ NEW: Combined collect and save with proper error handling
+fn collect_and_save(config: &Config) -> Result<(), String> {
+    // Collect data
+    let info = collect_system_data(config)?;
+    
+    // Save to file if enabled
+    if config.output.save_to_file {
+        save_to_file(&info, config)?;
+    }
+    
+    Ok(())
+}
+
 fn collect_system_data(config: &Config) -> Result<models::SystemInfo, String> {
-    info!("Collecting system information...");
+    debug!("Starting system information collection");
     
     let start_time = std::time::Instant::now();
     let info = collect_all_info(config);
@@ -124,14 +130,16 @@ fn collect_system_data(config: &Config) -> Result<models::SystemInfo, String> {
     
     info!("Collection completed in {:.2}s", elapsed.as_secs_f64());
     info!("  - Hostname: {}", info.hostname);
+    info!("  - OS: {} {}", info.os_type, info.os_version);
     info!("  - Services: {} items", info.services.len());
     info!("  - Software: {} items", info.installed_software.len());
     
     Ok(info)
 }
 
-/// Save collected data to JSON file
 fn save_to_file(info: &models::SystemInfo, config: &Config) -> Result<String, String> {
+    debug!("Preparing to save data to file");
+    
     let timestamp = info.collected_at.format(&config.output.timestamp_format).to_string();
     let filename = format!("{}/system_info_{}.json", config.output.output_directory, timestamp);
     
@@ -141,7 +149,18 @@ fn save_to_file(info: &models::SystemInfo, config: &Config) -> Result<String, St
     fs::write(&filename, json)
         .map_err(|e| format!("Failed to write file: {}", e))?;
     
+    info!("✓ Data saved to: {}", filename);
     Ok(filename)
+}
+
+fn sleep_with_interrupt(running: &Arc<AtomicBool>, seconds: u64) {
+    for _ in 0..seconds {
+        if !running.load(Ordering::SeqCst) {
+            debug!("Sleep interrupted by shutdown signal");
+            break;
+        }
+        thread::sleep(Duration::from_secs(1));
+    }
 }
 
 /// Initialize logging with console and file support

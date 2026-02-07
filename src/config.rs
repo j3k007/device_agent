@@ -8,7 +8,16 @@ pub struct Config {
     pub output: OutputConfig,
     pub logging: LoggingConfig,
     pub agent: AgentConfig,
+    pub retry: RetryConfig, 
 }
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct RetryConfig {
+    pub max_retries: u32,
+    pub initial_delay_ms: u64,
+    pub max_delay_ms: u64,
+}
+
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct CollectionConfig {
@@ -83,6 +92,11 @@ impl Config {
             agent: AgentConfig {
                 agent_id: "agent-001".to_string(),
                 agent_name: "Device Agent".to_string(),
+            },
+            retry: RetryConfig {  // ✅ NEW
+                max_retries: 5,
+                initial_delay_ms: 1000,
+                max_delay_ms: 60000,
             },
         }
     }
