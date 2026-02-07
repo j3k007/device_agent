@@ -1,0 +1,24 @@
+[Unit]
+Description=Device Agent - System Monitoring Service
+After=network.target
+
+[Service]
+Type=simple
+User=deviceagent
+Group=deviceagent
+WorkingDirectory=/opt/device-agent
+ExecStart=/usr/local/bin/device-agent
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/device-agent/data /opt/device-agent/logs
+
+[Install]
+WantedBy=multi-user.target
