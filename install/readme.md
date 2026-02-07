@@ -1,4 +1,3 @@
-cat > install/README.md << 'EOF'
 # Device Agent Installation Guide
 
 This directory contains installation scripts for different operating systems.
@@ -151,4 +150,3 @@ For issues, please check:
 
 **Note**: Uninstalling will preserve data and configuration by default. 
 You'll be prompted if you want to remove everything.
-EOF
