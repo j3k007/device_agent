@@ -18,3 +18,4 @@ once_cell = "1.19"
 
 # ✅ NEW: For better file logging
 fern = "0.6"
+backoff = "0.4"
