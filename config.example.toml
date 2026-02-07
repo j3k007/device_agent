@@ -1,0 +1,34 @@
+# config.example.toml
+# Copy this to config.toml and customize
+
+[collection]
+# How often to collect data (in seconds)
+interval_seconds = 300
+
+# What to collect
+include_services = true
+include_software = true
+
+[output]
+# Where to save collected data
+output_directory = "./data"
+save_to_file = true
+
+# File naming format
+timestamp_format = "%Y%m%d_%H%M%S"
+
+[logging]
+# Log level: trace, debug, info, warn, error
+level = "info"
+
+# Log to console
+console = true
+
+# Log to file
+file = true
+log_directory = "./logs"
+
+[agent]
+# Agent identification
+agent_id = "agent-001"
+agent_name = "My Device"
