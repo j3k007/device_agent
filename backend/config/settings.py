@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.0/ref/settings/
 """
 
 from pathlib import Path
+import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -37,9 +38,15 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
+    'corsheaders',
+    'agents',
+    'devices',
+    'api',
 ]
 
 MIDDLEWARE = [
+    'corsheaders.middleware.CorsMiddleware', 
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -121,3 +128,114 @@ STATIC_URL = 'static/'
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+CORS_ALLOW_ALL_ORIGINS = True
+CORS_ALLOW_CREDENTIALS = True
+
+REST_FRAMEWORK = {
+    'DEFAULT_RENDERER_CLASSES': [
+        'rest_framework.renderers.JSONRenderer',
+    ],
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+    ],
+}
+
+
+LOGS_DIR = BASE_DIR / 'logs'
+os.makedirs(LOGS_DIR, exist_ok=True)
+
+LOGGING = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            'format': '[{levelname}] {asctime} {name} {module} {funcName} {message}',
+            'style': '{',
+            'datefmt': '%Y-%m-%d %H:%M:%S',
+        },
+        'simple': {
+            'format': '[{levelname}] {asctime} {message}',
+            'style': '{',
+            'datefmt': '%Y-%m-%d %H:%M:%S',
+        },
+    },
+    'handlers': {
+        'console': {
+            'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
+            'level': 'INFO',
+        },
+        'file': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': LOGS_DIR / 'django.log',
+            'maxBytes': 10485760,  # 10 MB
+            'backupCount': 5,
+            'formatter': 'verbose',
+            'level': 'DEBUG',
+        },
+        'api_file': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': LOGS_DIR / 'api.log',
+            'maxBytes': 10485760,  # 10 MB
+            'backupCount': 5,
+            'formatter': 'verbose',
+            'level': 'DEBUG',
+        },
+        'error_file': {
+            'class': 'logging.handlers.RotatingFileHandler',
+            'filename': LOGS_DIR / 'errors.log',
+            'maxBytes': 10485760,  # 10 MB
+            'backupCount': 10,
+            'formatter': 'verbose',
+            'level': 'ERROR',
+        },
+    },
+    'root': {
+        'handlers': ['console', 'file', 'error_file'],
+        'level': 'INFO',
+    },
+    'loggers': {
+        # Django's own logs
+        'django': {
+            'handlers': ['console', 'file', 'error_file'],
+            'level': 'INFO',
+            'propagate': False,
+        },
+        
+        # Django request logs
+        'django.request': {
+            'handlers': ['console', 'file', 'error_file'],
+            'level': 'WARNING',
+            'propagate': False,
+        },
+        
+        # Django database queries (useful for debugging)
+        'django.db.backends': {
+            'handlers': ['file'],
+            'level': 'WARNING',  # Set to DEBUG to see all SQL queries
+            'propagate': False,
+        },
+        
+        # ✅ API-specific logs
+        'api': {
+            'handlers': ['console', 'api_file', 'error_file'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        
+        # ✅ Agents app logs
+        'agents': {
+            'handlers': ['console', 'file', 'error_file'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+        
+        # ✅ Devices app logs
+        'devices': {
+            'handlers': ['console', 'file', 'error_file'],
+            'level': 'DEBUG',
+            'propagate': False,
+        },
+    },
+}

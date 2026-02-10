@@ -2,10 +2,12 @@ mod models;
 mod collector;
 mod config;
 mod retry;
+mod sender;
 
 use collector::collect_all_info;
 use config::Config;
 use retry::retry_with_backoff;
+use sender::send_to_backend; 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
@@ -59,7 +61,6 @@ fn main() {
     info!("");
 
     // Main collection loop
-    let mut iteration = 0;
     let mut iteration = 0;
     let mut successful_collections = 0;
     let mut failed_collections = 0;
@@ -116,6 +117,10 @@ fn collect_and_save(config: &Config) -> Result<(), String> {
     // Save to file if enabled
     if config.output.save_to_file {
         save_to_file(&info, config)?;
+    }
+    // ✅ NEW: Send to backend if enabled
+    if config.server.enabled {
+        send_to_backend(&info, config)?;
     }
     
     Ok(())
