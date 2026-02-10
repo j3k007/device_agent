@@ -1,30 +1,231 @@
-# Rust
+# ============================================
+# Rust Agent
+# ============================================
+
+# Compiled files
 /target
 Cargo.lock
 **/*.rs.bk
 *.pdb
+**/*.pyc
 
-# Configuration
+# Configuration (contains sensitive tokens)
 config.toml
 *.local.toml
 
-# IDE
-.idea/
+# ============================================
+# Python/Django Backend
+# ============================================
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual environments
+backend/venv/
+backend/env/
+backend/ENV/
+backend/.venv/
+venv/
+env/
+ENV/
+
+# Django
+backend/db.sqlite3
+backend/db.sqlite3-journal
+backend/*.sqlite3
+backend/media/
+backend/staticfiles/
+backend/static_collected/
+
+# Django migrations (optional - uncomment if you want to ignore)
+# backend/*/migrations/*.py
+# backend/*/migrations/*.pyc
+
+# Django secret key and settings
+backend/config/local_settings.py
+backend/.env
+backend/.env.local
+backend/.env.production
+
+# ============================================
+# IDE / Editor
+# ============================================
+
+# VSCode
 .vscode/
+*.code-workspace
+
+# JetBrains (PyCharm, IntelliJ, etc.)
+.idea/
+*.iml
+*.iws
+.idea_modules/
+
+# Vim
 *.swp
 *.swo
 *~
+.*.swp
 
-# OS
+# Emacs
+*~
+\#*\#
+.\#*
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+
+# ============================================
+# Operating System
+# ============================================
+
+# macOS
 .DS_Store
-Thumbs.db
+.AppleDouble
+.LSOverride
+._*
 
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+
+# ============================================
 # Logs
+# ============================================
+
+# Application logs
 *.log
 logs/
+backend/logs/
+*.log.*
 
-# Environment
+# ============================================
+# Data & Output
+# ============================================
+
+# Agent output data
+data/
+*data/
+*.json.bak
+
+# Temporary files
+*.tmp
+*.temp
+*.cache
+
+# ============================================
+# Environment & Secrets
+# ============================================
+
+# Environment variables
 .env
 .env.local
+.env.*.local
+.envrc
 
-*data
+# Secrets
+secrets/
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# ============================================
+# Build & Distribution
+# ============================================
+
+# Python distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# PyInstaller
+*.manifest
+*.spec
+
+# ============================================
+# Testing & Coverage
+# ============================================
+
+# pytest
+.pytest_cache/
+.cache/
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+*.cover
+
+# Rust tests
+*.profraw
+
+# ============================================
+# Documentation
+# ============================================
+
+# Sphinx documentation
+docs/_build/
+site/
+
+# ============================================
+# Package Managers
+# ============================================
+
+# npm (if you add frontend later)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Pipenv
+Pipfile.lock
+
+# Poetry
+poetry.lock
+
+# ============================================
+# Miscellaneous
+# ============================================
+
+# Backup files
+*.bak
+*.backup
+*.old
+*.orig
+
+# Compressed files (except release archives)
+*.zip
+*.tar.gz
+*.rar
+*.7z
+
+# Keep install scripts
+!install/**/*.sh
+!install/**/*.ps1
+!install/**/*.service
+!install/**/*.plist

@@ -8,7 +8,8 @@ pub struct Config {
     pub output: OutputConfig,
     pub logging: LoggingConfig,
     pub agent: AgentConfig,
-    pub retry: RetryConfig, 
+    pub retry: RetryConfig,
+    pub server: ServerConfig, 
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -46,6 +47,14 @@ pub struct AgentConfig {
     pub agent_id: String,
     pub agent_name: String,
 }
+
+#[derive(Debug, Deserialize, Clone)]
+pub struct ServerConfig {
+    pub enabled: bool,
+    pub url: String,
+    pub timeout_seconds: u64,
+}
+
 
 impl Config {
     /// Load configuration from file
@@ -98,6 +107,11 @@ impl Config {
                 initial_delay_ms: 1000,
                 max_delay_ms: 60000,
             },
+            server: ServerConfig {  // ✅ NEW
+                enabled: false,
+                url: "http://localhost:8000/api/heartbeat/".to_string(),
+                timeout_seconds: 30,
+            }
         }
     }
 
