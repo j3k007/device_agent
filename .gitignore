@@ -229,3 +229,9 @@ poetry.lock
 !install/**/*.ps1
 !install/**/*.service
 !install/**/*.plist
+
+# ✅ NEW: Encrypted token and key files
+.token
+.key
+*.token
+*.key

@@ -3,6 +3,7 @@ mod collector;
 mod config;
 mod retry;
 mod sender;
+mod crypto;
 
 use collector::collect_all_info;
 use config::Config;
@@ -12,10 +13,53 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::thread;
 use std::time::Duration;
+use std::env;
 use std::fs;
 use log::{info, error, warn, debug};
 
 fn main() {
+    // ✅ Handle CLI arguments BEFORE loading config
+    let args: Vec<String> = env::args().collect();
+    
+    if args.len() > 1 {
+        match args[1].as_str() {
+            "--register" | "-r" => {
+                handle_register(&args);
+                return;
+            }
+            "--unregister" | "-u" => {
+                handle_unregister();
+                return;
+            }
+            "--check-token" | "-c" => {
+                handle_check_token();
+                return;
+            }
+            "--help" | "-h" => {
+                print_help();
+                return;
+            }
+            _ => {
+                eprintln!("✗ Unknown option: {}", args[1]);
+                eprintln!("\nRun 'device-agent --help' for usage information");
+                std::process::exit(1);
+            }
+        }
+    }
+    
+    // ✅ Check if token is registered before starting
+    if !crypto::has_token() {
+        eprintln!("");
+        eprintln!("✗ Error: No API token registered");
+        eprintln!("");
+        eprintln!("Please register your device first:");
+        eprintln!("  device-agent --register <api_token>");
+        eprintln!("");
+        eprintln!("Get your token from Django admin:");
+        eprintln!("  http://localhost:8000/admin/agents/agenttoken/");
+        eprintln!("");
+        std::process::exit(1);
+    }
     // Load configuration
     let config = match Config::load("config.toml") {
         Ok(cfg) => {
@@ -107,6 +151,144 @@ fn main() {
     info!("Total iterations: {}", iteration);
     info!("Successful collections: {}", successful_collections);
     info!("Failed collections: {}", failed_collections);
+}
+
+// ✅ NEW: Handle registration
+fn handle_register(args: &[String]) {
+    if args.len() < 3 {
+        eprintln!("✗ Error: Missing token argument");
+        eprintln!("");
+        eprintln!("Usage:");
+        eprintln!("  device-agent --register <api_token>");
+        eprintln!("");
+        eprintln!("Example:");
+        eprintln!("  device-agent --register agt_xxxxxxxxxxxxxxxxxxx");
+        eprintln!("");
+        std::process::exit(1);
+    }
+    
+    let token = &args[2];
+    
+    println!("");
+    println!("=== Registering Device Agent ===");
+    println!("");
+    
+    match crypto::save_token(token) {
+        Ok(_) => {
+            println!("");
+            println!("✓ Registration successful!");
+            println!("");
+            println!("Your API token has been encrypted and stored securely.");
+            println!("You can now start the agent:");
+            println!("  device-agent");
+            println!("");
+            std::process::exit(0);
+        }
+        Err(e) => {
+            eprintln!("");
+            eprintln!("✗ Registration failed: {}", e);
+            eprintln!("");
+            std::process::exit(1);
+        }
+    }
+}
+
+// ✅ NEW: Handle unregistration
+fn handle_unregister() {
+    println!("");
+    println!("=== Unregistering Device Agent ===");
+    println!("");
+    
+    match crypto::delete_token() {
+        Ok(_) => {
+            println!("");
+            println!("✓ Unregistration successful!");
+            println!("");
+            println!("Your API token has been deleted.");
+            println!("To use the agent again, register with:");
+            println!("  device-agent --register <token>");
+            println!("");
+            std::process::exit(0);
+        }
+        Err(e) => {
+            eprintln!("");
+            eprintln!("✗ Unregistration failed: {}", e);
+            eprintln!("");
+            std::process::exit(1);
+        }
+    }
+}
+
+// ✅ NEW: Check token status
+fn handle_check_token() {
+    println!("");
+    println!("=== Token Status ===");
+    println!("");
+    
+    if crypto::has_token() {
+        println!("✓ API token is registered");
+        println!("  Location: {}", crypto::get_token_location());
+        println!("");
+        
+        // Try to load token to verify it's valid
+        match crypto::load_token() {
+            Ok(token) => {
+                println!("✓ Token is valid and can be decrypted");
+                println!("  Length: {} characters", token.len());
+                println!("  Starts with: {}...", &token[..7]);
+                println!("");
+            }
+            Err(e) => {
+                eprintln!("✗ Token file exists but cannot be decrypted: {}", e);
+                eprintln!("");
+                eprintln!("Try re-registering:");
+                eprintln!("  device-agent --register <token>");
+                eprintln!("");
+                std::process::exit(1);
+            }
+        }
+        
+        std::process::exit(0);
+    } else {
+        println!("✗ No API token found");
+        println!("");
+        println!("Register your device with:");
+        println!("  device-agent --register <token>");
+        println!("");
+        std::process::exit(1);
+    }
+}
+
+// ✅ NEW: Print help
+fn print_help() {
+    println!("");
+    println!("Device Agent - System Monitoring Agent");
+    println!("");
+    println!("USAGE:");
+    println!("  device-agent [OPTIONS]");
+    println!("");
+    println!("OPTIONS:");
+    println!("  --register <token>, -r <token>    Register agent with API token");
+    println!("  --unregister, -u                   Remove stored API token");
+    println!("  --check-token, -c                  Check if token is registered");
+    println!("  --help, -h                         Show this help message");
+    println!("");
+    println!("EXAMPLES:");
+    println!("  # Register agent with token from Django admin");
+    println!("  device-agent --register agt_xxxxxxxxxxxxxxxxxxx");
+    println!("");
+    println!("  # Start agent (runs continuously)");
+    println!("  device-agent");
+    println!("");
+    println!("  # Check if token is registered");
+    println!("  device-agent --check-token");
+    println!("");
+    println!("  # Unregister (delete token)");
+    println!("  device-agent --unregister");
+    println!("");
+    println!("Get your API token from:");
+    println!("  http://localhost:8000/admin/agents/agenttoken/");
+    println!("");
 }
 
 // ✅ NEW: Combined collect and save with proper error handling
