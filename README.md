@@ -41,21 +41,21 @@ The Device Agent is a secure, lightweight monitoring solution that collects syst
 │                     Device (macOS/Linux/Windows)            │
 │  ┌───────────────────────────────────────────────────────┐  │
 │  │  Rust Agent                                           │  │
-│  │  ├── Collects system info every N seconds            │  │
-│  │  ├── Encrypted token storage                         │  │
-│  │  ├── Automatic retry with exponential backoff        │  │
-│  │  └── Sends via HTTPS to backend                      │  │
+│  │  ├── Collects system info every N seconds             │  │
+│  │  ├── Encrypted token storage                          │  │
+│  │  ├── Automatic retry with exponential backoff         │  │
+│  │  └── Sends via HTTPS to backend                       │  │
 │  └───────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
                             │ HTTPS + Bearer Token
                             ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                     Django Backend Server                    │
+│                     Django Backend Server                   │
 │  ┌───────────────────────────────────────────────────────┐  │
 │  │  REST API (Django + DRF)                              │  │
 │  │  ├── Token authentication                             │  │
 │  │  ├── Data validation                                  │  │
-│  │  ├── Database storage (SQLite/PostgreSQL)            │  │
+│  │  ├── Database storage (SQLite/PostgreSQL)             │  │
 │  │  └── Admin interface                                  │  │
 │  └───────────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────────┘
