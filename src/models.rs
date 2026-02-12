@@ -14,5 +14,10 @@ pub struct SystemInfo {
     pub cpu_info: String,
     pub memory_total: u64,
     pub memory_available: u64,
-    pub ip_addresses: HashMap<String, String>,
+    // Network Info - IP → [IPv6 addresses]
+    pub ip_addresses: HashMap<String, Vec<String>>,
+    // Services - list of service names
+    pub services: Vec<String>,
+    // Installed Software - list of app names
+    pub installed_software: Vec<String>,
 }

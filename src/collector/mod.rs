@@ -15,7 +15,7 @@ use crate::config::Config;
 use crate::models::SystemInfo;
 use crate::fingerprint;
 use chrono::Utc;
-use log::{error, debug};
+use log::{error, debug, info};
 
 /// Collect all system information including fingerprint
 pub fn collect_all_info(config: &Config) -> SystemInfo {
@@ -38,6 +38,16 @@ pub fn collect_all_info(config: &Config) -> SystemInfo {
             format!("{:x}", hasher.finalize())
         }
     };
+
+    // Collect services
+    info!("Collecting services...");
+    let services = get_services();
+    info!("✓ Found {} services", services.len());
+    
+    // Collect installed software
+    info!("Collecting installed software...");
+    let installed_software = get_software();
+    info!("✓ Found {} installed applications", installed_software.len());
     
     // Return system info (no services/software for Phase 2)
     SystemInfo {
@@ -51,6 +61,54 @@ pub fn collect_all_info(config: &Config) -> SystemInfo {
         memory_total: basic.memory_total,
         memory_available: basic.memory_available,
         ip_addresses: basic.ip_addresses,
+        services,
+        installed_software,
         collected_at: Utc::now(),
+    }
+}
+
+/// Get running services based on OS
+fn get_services() -> Vec<String> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::get_services()
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        linux::get_services()
+    }
+    
+    #[cfg(target_os = "windows")]
+    {
+        windows::get_services()
+    }
+    
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    {
+        Vec::new()
+    }
+}
+
+/// Get installed software based on OS
+fn get_software() -> Vec<String> {
+    #[cfg(target_os = "macos")]
+    {
+        macos::get_software()
+    }
+    
+    #[cfg(target_os = "linux")]
+    {
+        linux::get_software()
+    }
+    
+    #[cfg(target_os = "windows")]
+    {
+        windows::get_software()
+    }
+    
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    {
+        Vec::new()
     }
 }

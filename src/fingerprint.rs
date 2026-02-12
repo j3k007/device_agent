@@ -1,5 +1,5 @@
 use std::process::Command;
-use log::{debug, error, warn};
+use log::{debug};
 use sha2::{Sha256, Digest};
 
 /// Generate a unique device fingerprint

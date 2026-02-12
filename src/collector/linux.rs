@@ -1,61 +1,71 @@
 use std::process::Command;
+use log::{debug, warn};
 
-// ✅ ADD pub
+/// Get running services on Linux (systemd)
 pub fn get_services() -> Vec<String> {
-    let output = Command::new("systemctl")
-        .args(&["list-units", "--type=service", "--all"])
+    let mut services = Vec::new();
+    
+    debug!("Collecting Linux services...");
+    
+    // Get systemd services
+    if let Ok(output) = Command::new("systemctl")
+        .args(&["list-units", "--type=service", "--state=running", "--no-pager", "--no-legend"])
         .output()
-        .expect("Failed to execute systemctl");
-    
-    parse_services_output(output)
-}
-
-// ✅ ADD pub
-pub fn get_installed_software() -> Vec<String> {
-    let output = Command::new("dpkg")
-        .args(&["--list"])
-        .output();
-    
-    match output {
-        Ok(out) => parse_dpkg_output(out),
-        Err(_) => try_rpm_packages()
-    }
-}
-
-fn parse_services_output(output: std::process::Output) -> Vec<String> {
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect()
-}
-
-fn parse_dpkg_output(output: std::process::Output) -> Vec<String> {
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .filter_map(|line| {
-            if line.starts_with("ii") {
-                let parts: Vec<&str> = line.split_whitespace().collect();
-                if parts.len() >= 2 {
-                    return Some(parts[1].to_string());
-                }
+    {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        
+        for line in stdout.lines() {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if !parts.is_empty() {
+                let service_name = parts[0].trim_end_matches(".service");
+                services.push(service_name.to_string());
             }
-            None
-        })
-        .collect()
+        }
+    } else {
+        warn!("Failed to get Linux services");
+    }
+    
+    debug!("Found {} services", services.len());
+    services
 }
 
-fn try_rpm_packages() -> Vec<String> {
-    match Command::new("rpm")
-        .args(&["-qa"])
-        .output() {
-        Ok(output) if output.status.success() => {
-            String::from_utf8_lossy(&output.stdout)
-                .lines()
-                .map(|s| s.trim().to_string())
-                .filter(|s| !s.is_empty())
-                .collect()
+/// Get installed software on Linux
+pub fn get_software() -> Vec<String> {
+    let mut software = Vec::new();
+    
+    debug!("Collecting Linux packages...");
+    
+    // Try dpkg (Debian/Ubuntu)
+    if let Ok(output) = Command::new("dpkg")
+        .args(&["--get-selections"])
+        .output()
+    {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        
+        for line in stdout.lines() {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 2 && parts[1] == "install" {
+                software.push(parts[0].to_string());
+            }
         }
-        _ => Vec::new()
     }
+    // Try rpm (RedHat/CentOS/Fedora)
+    else if let Ok(output) = Command::new("rpm")
+        .args(&["-qa", "--qf", "%{NAME}\n"])
+        .output()
+    {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        
+        for line in stdout.lines() {
+            if !line.is_empty() {
+                software.push(line.to_string());
+            }
+        }
+    } else {
+        warn!("Failed to get Linux packages");
+    }
+    
+    software.sort();
+    debug!("Found {} packages", software.len());
+    software
 }
