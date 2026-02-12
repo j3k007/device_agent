@@ -42,8 +42,8 @@ backend/staticfiles/
 backend/static_collected/
 
 # Django migrations (optional - uncomment if you want to ignore)
-# backend/*/migrations/*.py
-# backend/*/migrations/*.pyc
+backend/*/migrations/*.py
+backend/*/migrations/*.pyc
 
 # Django secret key and settings
 backend/config/local_settings.py

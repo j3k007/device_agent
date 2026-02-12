@@ -4,6 +4,7 @@ mod config;
 mod retry;
 mod sender;
 mod crypto;
+mod fingerprint;
 
 use collector::collect_all_info;
 use config::Config;
@@ -23,6 +24,14 @@ fn main() {
     
     if args.len() > 1 {
         match args[1].as_str() {
+            "--init" | "-i" => {
+                handle_init();
+                return;
+            }
+            "--check-status" | "-s" => {
+                handle_check_status();
+                return;
+            }
             "--register" | "-r" => {
                 handle_register(&args);
                 return;
@@ -52,11 +61,13 @@ fn main() {
         eprintln!("");
         eprintln!("✗ Error: No API token registered");
         eprintln!("");
-        eprintln!("Please register your device first:");
-        eprintln!("  device-agent --register <api_token>");
+        eprintln!("To get started:");
+        eprintln!("1. Request registration: device-agent --init");
+        eprintln!("2. Wait for admin approval");
+        eprintln!("3. Check status: device-agent --check-status");
         eprintln!("");
-        eprintln!("Get your token from Django admin:");
-        eprintln!("  http://localhost:8000/admin/agents/agenttoken/");
+        eprintln!("Alternative: If you have a token:");
+        eprintln!("  device-agent --register <token>");
         eprintln!("");
         std::process::exit(1);
     }
@@ -151,6 +162,222 @@ fn main() {
     info!("Total iterations: {}", iteration);
     info!("Successful collections: {}", successful_collections);
     info!("Failed collections: {}", failed_collections);
+}
+
+// ✅ NEW: Check registration status
+fn handle_check_status() {
+    println!("");
+    println!("=== Checking Registration Status ===");
+    println!("");
+    
+    let config = match Config::load("config.toml") {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            eprintln!("✗ Error loading config: {}", e);
+            std::process::exit(1);
+        }
+    };
+    
+    let status_url = config.server.url
+        .replace("/api/heartbeat/", "/api/agents/register/")
+        .replace("/heartbeat/", "/agents/register/") + &config.agent.agent_id + "/status/";
+    
+    println!("Checking status for: {}", config.agent.agent_id);
+    println!("URL: {}", status_url);
+    println!("");
+    
+    let client = reqwest::blocking::Client::new();
+    match client.get(&status_url).send() {
+        Ok(response) => {
+            match response.json::<serde_json::Value>() {
+                Ok(json) => {
+                    let status = json.get("status").and_then(|v| v.as_str()).unwrap_or("unknown");
+                    
+                    match status {
+                        "approved" => {
+                            println!("✓ Status: APPROVED");
+                            println!("");
+                            
+                            if let Some(token) = json.get("token").and_then(|v| v.as_str()) {
+                                println!("Your device has been approved!");
+                                println!("");
+                                println!("Saving token automatically...");
+                                
+                                match crypto::save_token(token) {
+                                    Ok(_) => {
+                                        println!("✓ Token saved successfully!");
+                                        println!("");
+                                        println!("You can now start the agent:");
+                                        println!("  device-agent");
+                                    }
+                                    Err(e) => {
+                                        eprintln!("✗ Failed to save token: {}", e);
+                                        println!("");
+                                        println!("Please save manually:");
+                                        println!("  device-agent --register {}", token);
+                                    }
+                                }
+                            } else {
+                                println!("Token already saved. You can start the agent:");
+                                println!("  device-agent");
+                            }
+                        }
+                        "pending" => {
+                            println!("⏳ Status: PENDING APPROVAL");
+                            println!("");
+                            if let Some(msg) = json.get("message").and_then(|v| v.as_str()) {
+                                println!("{}", msg);
+                            }
+                            println!("");
+                            println!("Please wait for admin approval.");
+                            println!("Check again later: device-agent --check-status");
+                        }
+                        "rejected" => {
+                            println!("✗ Status: REJECTED");
+                            println!("");
+                            println!("Your registration was rejected.");
+                            println!("Please contact your administrator for more information.");
+                        }
+                        "not_found" => {
+                            println!("✗ Status: NOT FOUND");
+                            println!("");
+                            println!("No registration found for this device.");
+                            println!("Please register first: device-agent --init");
+                        }
+                        _ => {
+                            println!("Status: {}", status);
+                            println!("{}", serde_json::to_string_pretty(&json).unwrap_or_default());
+                        }
+                    }
+                }
+                Err(e) => {
+                    eprintln!("Failed to parse response: {}", e);
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("✗ Failed to check status: {}", e);
+            eprintln!("");
+            eprintln!("Make sure the backend is accessible.");
+        }
+    }
+    
+    println!("");
+}
+
+// ✅ NEW: Initialize and request registration
+fn handle_init() {
+    println!("");
+    println!("=== Device Agent Initialization ===");
+    println!("");
+    
+    // Load config
+    let config = match Config::load("config.toml") {
+        Ok(cfg) => cfg,
+        Err(e) => {
+            eprintln!("✗ Error loading config: {}", e);
+            eprintln!("\nPlease create config.toml first:");
+            eprintln!("  cp config.example.toml config.toml");
+            std::process::exit(1);
+        }
+    };
+    
+    println!("Requesting registration for:");
+    println!("  Agent ID:   {}", config.agent.agent_id);
+    println!("  Agent Name: {}", config.agent.agent_name);
+    println!("");
+    
+    // Collect system info
+    println!("Collecting system information...");
+    let info = collector::common::collect_basic_info(&config);
+    
+    // Generate fingerprint
+    println!("Generating device fingerprint...");
+    let device_fingerprint = match fingerprint::generate_fingerprint() {
+        Ok(fp) => {
+            println!("✓ Fingerprint: {}...", &fp[..16]);
+            fp
+        }
+        Err(e) => {
+            eprintln!("✗ Failed to generate fingerprint: {}", e);
+            std::process::exit(1);
+        }
+    };
+    
+    println!("");
+    
+    // Prepare registration request
+    let registration_data = serde_json::json!({
+        "agent_id": config.agent.agent_id,
+        "agent_name": config.agent.agent_name,
+        "hostname": info.hostname,
+        "os_type": info.os_type,
+        "os_version": info.os_version,
+        "device_fingerprint": device_fingerprint,
+    });
+    
+    // Send registration request
+    let registration_url = config.server.url.replace("/heartbeat/", "/agents/register/");
+    
+    println!("Sending registration request to:");
+    println!("  {}", registration_url);
+    println!("");
+    
+    let client = reqwest::blocking::Client::new();
+    match client
+        .post(&registration_url)
+        .header("Content-Type", "application/json")
+        .json(&registration_data)
+        .send()
+    {
+        Ok(response) => {
+            let status_code = response.status();
+            
+            match response.json::<serde_json::Value>() {
+                Ok(json) => {
+                    if status_code.is_success() || status_code.as_u16() == 202 {
+                        println!("✓ Registration request submitted successfully!");
+                        println!("");
+                        if let Some(msg) = json.get("message").and_then(|v| v.as_str()) {
+                            println!("{}", msg);
+                        }
+                        println!("");
+                        println!("Next steps:");
+                        println!("1. Admin will review your request in Django admin");
+                        println!("2. Check status: device-agent --check-status");
+                        println!("3. Once approved, token will be saved automatically");
+                        println!("");
+                    } else {
+                        println!("✗ Registration failed ({})", status_code);
+                        println!("");
+                        if let Some(error) = json.get("error").and_then(|v| v.as_str()) {
+                            println!("Error: {}", error);
+                        }
+                        if let Some(msg) = json.get("message").and_then(|v| v.as_str()) {
+                            println!("{}", msg);
+                        }
+                        println!("");
+                        std::process::exit(1);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("✗ Failed to parse response: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("");
+            eprintln!("✗ Failed to send registration request:");
+            eprintln!("  {}", e);
+            eprintln!("");
+            eprintln!("Make sure:");
+            eprintln!("- Backend server is running");
+            eprintln!("- URL in config.toml is correct");
+            eprintln!("- Network connectivity is working");
+            std::process::exit(1);
+        }
+    }
 }
 
 // ✅ NEW: Handle registration
@@ -318,8 +545,6 @@ fn collect_system_data(config: &Config) -> Result<models::SystemInfo, String> {
     info!("Collection completed in {:.2}s", elapsed.as_secs_f64());
     info!("  - Hostname: {}", info.hostname);
     info!("  - OS: {} {}", info.os_type, info.os_version);
-    info!("  - Services: {} items", info.services.len());
-    info!("  - Software: {} items", info.installed_software.len());
     
     Ok(info)
 }

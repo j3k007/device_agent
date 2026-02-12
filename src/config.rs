@@ -23,8 +23,6 @@ pub struct RetryConfig {
 #[derive(Debug, Deserialize, Clone)]
 pub struct CollectionConfig {
     pub interval_seconds: u64,
-    pub include_services: bool,
-    pub include_software: bool,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -84,8 +82,6 @@ impl Config {
         Config {
             collection: CollectionConfig {
                 interval_seconds: 300,
-                include_services: true,
-                include_software: true,
             },
             output: OutputConfig {
                 output_directory: "./data".to_string(),
