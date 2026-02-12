@@ -1,90 +1,147 @@
 // src/collector/common.rs
 
-use sysinfo::System;
-use crate::models::SystemInfo;
 use crate::config::Config;
-use std::net::IpAddr;
+use sysinfo::{System};
 use std::collections::HashMap;
-use chrono::Utc;
+use local_ip_address::local_ip;
 
-pub fn collect_basic_info(config: &Config) -> SystemInfo {
+/// Basic system information structure (internal use)
+pub struct BasicInfo {
+    pub hostname: String,
+    pub os_type: String,
+    pub os_version: String,
+    pub cpu_info: String,
+    pub memory_total: u64,
+    pub memory_available: u64,
+    pub ip_addresses: HashMap<String, String>,
+}
+
+/// Collect basic system information (platform-independent)
+pub fn collect_basic_info(_config: &Config) -> BasicInfo {
     let mut sys = System::new_all();
     sys.refresh_all();
-
-    SystemInfo {
-        collected_at: Utc::now(),
-        agent_id: config.agent.agent_id.clone(),
-        agent_name: config.agent.agent_name.clone(),
-        hostname: get_hostname(),
-        os_type: get_os_type(),
-        os_version: get_os_version(),
-        cpu_info: get_cpu_info(&sys),
-        memory_total: sys.total_memory(),
-        memory_available: sys.available_memory(),
-        ip_addresses: get_ip_addresses(),
-        services: Vec::new(),
-        installed_software: Vec::new(),
+    
+    // Get hostname
+    let hostname = System::host_name().unwrap_or_else(|| "unknown".to_string());
+    
+    // Get OS info
+    let os_type = get_os_type();
+    let os_version = System::os_version().unwrap_or_else(|| "unknown".to_string());
+    
+    // Get CPU info
+    let cpu_info = if let Some(cpu) = sys.cpus().first() {
+        cpu.brand().to_string()
+    } else {
+        "Unknown CPU".to_string()
+    };
+    
+    // Get memory info
+    let memory_total = sys.total_memory();
+    let memory_available = sys.available_memory();
+    
+    // Get IP addresses
+    let ip_addresses = get_ip_addresses();
+    
+    BasicInfo {
+        hostname,
+        os_type,
+        os_version,
+        cpu_info,
+        memory_total,
+        memory_available,
+        ip_addresses,
     }
 }
 
-fn get_hostname() -> String {
-    System::host_name().unwrap_or_else(|| "unknown".to_string())
-}
-
+/// Get OS type as string
 fn get_os_type() -> String {
-    std::env::consts::OS.to_string()
-}
-
-fn get_os_version() -> String {
-    System::long_os_version().unwrap_or_else(|| "Unknown".to_string())
-}
-
-fn get_cpu_info(sys: &System) -> String {
-    sys.cpus()
-        .first()
-        .map(|cpu| cpu.brand().to_string())
-        .unwrap_or_else(|| "Unknown CPU".to_string())
-}
-
-fn get_ip_addresses() -> HashMap<String, Vec<String>> {
-    use local_ip_address::list_afinet_netifas;
+    #[cfg(target_os = "macos")]
+    return "macos".to_string();
     
-    let mut interface_ips: HashMap<String, (Option<String>, Vec<String>)> = HashMap::new();
+    #[cfg(target_os = "linux")]
+    return "linux".to_string();
     
-    match list_afinet_netifas() {
-        Ok(interfaces) => {
-            for (interface_name, ip) in interfaces {
-                let entry = interface_ips
-                    .entry(interface_name)
-                    .or_insert((None, Vec::new()));
-                
-                match ip {
-                    IpAddr::V4(ipv4) => {
-                        if !ipv4.is_loopback() {
-                            entry.0 = Some(ipv4.to_string());
-                        }
-                    }
-                    IpAddr::V6(ipv6) => {
-                        if !ipv6.is_loopback() && !is_link_local(&ipv6) {
-                            entry.1.push(ipv6.to_string());
+    #[cfg(target_os = "windows")]
+    return "windows".to_string();
+    
+    #[cfg(not(any(target_os = "macos", target_os = "linux", target_os = "windows")))]
+    return "unknown".to_string();
+}
+
+/// Get network IP addresses
+fn get_ip_addresses() -> HashMap<String, String> {
+    let mut addresses = HashMap::new();
+    
+    // Get local IP
+    if let Ok(local_ip) = local_ip() {
+        addresses.insert("local".to_string(), local_ip.to_string());
+    }
+    
+    // Get all network interfaces
+    #[cfg(target_os = "macos")]
+    {
+        if let Ok(output) = std::process::Command::new("ifconfig").output() {
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            let mut current_interface = String::new();
+            
+            for line in output_str.lines() {
+                if !line.starts_with('\t') && !line.starts_with(' ') && line.contains(':') {
+                    current_interface = line.split(':').next().unwrap_or("").to_string();
+                } else if line.contains("inet ") && !current_interface.is_empty() {
+                    if let Some(ip) = line.split_whitespace().nth(1) {
+                        if ip != "127.0.0.1" {
+                            addresses.insert(current_interface.clone(), ip.to_string());
                         }
                     }
                 }
             }
         }
-        Err(_) => {}
     }
     
-    let mut result = HashMap::new();
-    for (_, (ipv4_opt, ipv6_list)) in interface_ips {
-        if let Some(ipv4) = ipv4_opt {
-            result.insert(ipv4, ipv6_list);
+    #[cfg(target_os = "linux")]
+    {
+        if let Ok(output) = std::process::Command::new("ip").args(&["addr"]).output() {
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            let mut current_interface = String::new();
+            
+            for line in output_str.lines() {
+                if !line.starts_with(' ') && line.contains(':') {
+                    let parts: Vec<&str> = line.split(':').collect();
+                    if parts.len() >= 2 {
+                        current_interface = parts[1].trim().to_string();
+                    }
+                } else if line.contains("inet ") && !current_interface.is_empty() {
+                    if let Some(ip_part) = line.split_whitespace().nth(1) {
+                        let ip = ip_part.split('/').next().unwrap_or("");
+                        if ip != "127.0.0.1" && !current_interface.starts_with("lo") {
+                            addresses.insert(current_interface.clone(), ip.to_string());
+                        }
+                    }
+                }
+            }
         }
     }
     
-    result
-}
-
-fn is_link_local(ipv6: &std::net::Ipv6Addr) -> bool {
-    ipv6.segments()[0] == 0xfe80
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(output) = std::process::Command::new("ipconfig").output() {
+            let output_str = String::from_utf8_lossy(&output.stdout);
+            let mut current_interface = String::new();
+            
+            for line in output_str.lines() {
+                if !line.starts_with(' ') && line.contains(':') {
+                    current_interface = line.trim().trim_end_matches(':').to_string();
+                } else if line.contains("IPv4 Address") && !current_interface.is_empty() {
+                    if let Some(ip) = line.split(':').nth(1) {
+                        let ip = ip.trim();
+                        if ip != "127.0.0.1" {
+                            addresses.insert(current_interface.clone(), ip.to_string());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    addresses
 }

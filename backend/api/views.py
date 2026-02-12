@@ -64,6 +64,10 @@ def heartbeat(request):
     logger.debug(f"Software Count: {len(data.get('installed_software', []))}")
     logger.debug(f"Collected At: {data.get('collected_at', 'N/A')}")
     
+    fingerprint = data.get('device_fingerprint', '')
+    if fingerprint:
+        logger.info(f"Fingerprint: {fingerprint[:16]}...")
+    
     # Log IP addresses if present
     ip_addresses = data.get('ip_addresses', {})
     if ip_addresses:
