@@ -1,70 +1,57 @@
 use std::process::Command;
+use log::{debug, warn};
 
+/// Get running services on Windows
 pub fn get_services() -> Vec<String> {
-    let output = Command::new("powershell")
-        .args(&["-Command", "Get-Service | Select-Object Name, Status"])
-        .output()
-        .expect("Failed to execute PowerShell");
+    let mut services = Vec::new();
     
-    parse_services_output(output)
-}
-
-// ✅ ADD pub
-pub fn get_installed_software() -> Vec<String> {
-    let output = Command::new("powershell")
-        .args(&["-Command", 
-            "Get-ItemProperty HKLM:\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\* | Select-Object DisplayName"])
-        .output()
-        .expect("Failed to get installed software");
+    debug!("Collecting Windows services...");
     
-    parse_software_output(output)
-}
-
-// ✅ ADD pub (for future use)
-pub fn get_windows_updates() -> Vec<String> {
-    let output = Command::new("powershell")
-        .args(&["-Command", "Get-HotFix | Select-Object HotFixID, InstalledOn"])
+    // Get services using wmic
+    if let Ok(output) = Command::new("wmic")
+        .args(&["service", "where", "State='Running'", "get", "Name"])
         .output()
-        .expect("Failed to get Windows updates");
-    
-    parse_updates_output(output)
-}
-
-fn parse_services_output(output: std::process::Output) -> Vec<String> {
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .skip(2)
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-        .collect()
-}
-
-fn parse_software_output(output: std::process::Output) -> Vec<String> {
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .skip(2)
-        .filter_map(|line| {
-            let trimmed = line.trim();
-            if !trimmed.is_empty() && !trimmed.starts_with('-') {
-                Some(trimmed.to_string())
-            } else {
-                None
+    {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        
+        for line in stdout.lines().skip(1) {
+            let service = line.trim();
+            if !service.is_empty() && service != "Name" {
+                services.push(service.to_string());
             }
-        })
-        .collect()
+        }
+    } else {
+        warn!("Failed to get Windows services");
+    }
+    
+    debug!("Found {} services", services.len());
+    services
 }
 
-fn parse_updates_output(output: std::process::Output) -> Vec<String> {
-    String::from_utf8_lossy(&output.stdout)
-        .lines()
-        .skip(2)
-        .filter_map(|line| {
-            let trimmed = line.trim();
-            if !trimmed.is_empty() && !trimmed.starts_with('-') {
-                Some(trimmed.to_string())
-            } else {
-                None
+/// Get installed software on Windows
+pub fn get_software() -> Vec<String> {
+    let mut software = Vec::new();
+    
+    debug!("Collecting Windows programs...");
+    
+    // Get installed programs using wmic
+    if let Ok(output) = Command::new("wmic")
+        .args(&["product", "get", "Name"])
+        .output()
+    {
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        
+        for line in stdout.lines().skip(1) {
+            let program = line.trim();
+            if !program.is_empty() && program != "Name" {
+                software.push(program.to_string());
             }
-        })
-        .collect()
+        }
+    } else {
+        warn!("Failed to get Windows programs");
+    }
+    
+    software.sort();
+    debug!("Found {} programs", software.len());
+    software
 }

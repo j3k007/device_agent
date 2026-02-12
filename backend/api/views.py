@@ -3,7 +3,10 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from agents.authentication import AgentTokenAuthentication
+from devices.serializers import HeartbeatSerializer
+from devices.models import Device, DeviceService, DeviceSoftware
 from datetime import datetime
+from django.utils import timezone
 import logging
 
 logger = logging.getLogger(__name__)
@@ -12,13 +15,6 @@ logger = logging.getLogger(__name__)
 @authentication_classes([AgentTokenAuthentication])
 @permission_classes([AllowAny])
 def heartbeat(request):
-    """
-    Heartbeat endpoint - receives system data from agents
-    
-    Authentication: Required
-        Authorization: Bearer <agent_token>
-    """
-    
     # Get the authenticated agent token
     agent_token = request.auth
     
@@ -36,64 +32,198 @@ def heartbeat(request):
     logger.info(f"Heartbeat received from: {agent_token.agent_id}")
     logger.info("="*70)
     
-    data = request.data
-    
-    # Validate that agent_id in data matches token
-    data_agent_id = data.get('agent_id')
-    if data_agent_id and data_agent_id != agent_token.agent_id:
-        logger.warning(
-            f"Agent ID mismatch! Token: {agent_token.agent_id}, Data: {data_agent_id}"
-        )
+    # Validate data
+    serializer = HeartbeatSerializer(data=request.data)
+    if not serializer.is_valid():
+        logger.error(f"Invalid heartbeat data: {serializer.errors}")
         return Response(
             {
-                'error': 'Agent ID mismatch',
-                'message': f'Token is for agent {agent_token.agent_id} but data is from {data_agent_id}'
+                'error': 'Invalid data',
+                'details': serializer.errors
             },
             status=status.HTTP_400_BAD_REQUEST
         )
     
-    # Log heartbeat details
-    logger.info(f"Agent ID: {agent_token.agent_id}")
-    logger.info(f"Agent Name: {agent_token.agent_name}")
-    logger.info(f"Hostname: {data.get('hostname', 'N/A')}")
-    logger.info(f"OS: {data.get('os_type', 'N/A')} {data.get('os_version', 'N/A')}")
-    logger.info(f"CPU: {data.get('cpu_info', 'N/A')}")
-    logger.debug(f"Memory Total: {data.get('memory_total', 'N/A')} bytes")
-    logger.debug(f"Memory Available: {data.get('memory_available', 'N/A')} bytes")
-    logger.debug(f"Services Count: {len(data.get('services', []))}")
-    logger.debug(f"Software Count: {len(data.get('installed_software', []))}")
-    logger.debug(f"Collected At: {data.get('collected_at', 'N/A')}")
+    data = serializer.validated_data
     
-    fingerprint = data.get('device_fingerprint', '')
-    if fingerprint:
-        logger.info(f"Fingerprint: {fingerprint[:16]}...")
+    # Validate agent_id matches token
+    if data['agent_id'] != agent_token.agent_id:
+        logger.warning(
+            f"Agent ID mismatch! Token: {agent_token.agent_id}, Data: {data['agent_id']}"
+        )
+        return Response(
+            {
+                'error': 'Agent ID mismatch',
+                'message': f'Token is for agent {agent_token.agent_id} but data is from {data["agent_id"]}'
+            },
+            status=status.HTTP_400_BAD_REQUEST
+        )
     
-    # Log IP addresses if present
-    ip_addresses = data.get('ip_addresses', {})
-    if ip_addresses:
-        logger.debug(f"IP Addresses: {ip_addresses}")
+    # Process and store data
+    try:
+        device, services_stats, software_stats = process_heartbeat(agent_token, data)
+        
+        logger.info(f"✓ Device updated: {device.hostname}")
+        logger.info(f"✓ Services: {services_stats['active']} active")
+        logger.info(f"✓ Software: {software_stats['installed']} installed")
+        logger.info("="*70)
+        
+        return Response({
+            'status': 'success',
+            'message': 'Heartbeat received and stored',
+            'timestamp': datetime.now(),
+            'device_id': device.id,
+            'device': {
+                'hostname': device.hostname,
+                'os': f"{device.os_type} {device.os_version}",
+                'memory_usage_percent': device.memory_usage_percent,
+                'services_count': services_stats['active'],
+                'software_count': software_stats['installed'],
+            }
+        }, status=status.HTTP_200_OK)
+        
+    except Exception as e:
+        logger.exception(f"Error processing heartbeat: {e}")
+        return Response(
+            {
+                'error': 'Processing failed',
+                'details': str(e)
+            },
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+
+
+def process_heartbeat(agent_token, data):
+    """
+    Process heartbeat data and update database
+    Returns: (device, services_stats, software_stats)
+    """
     
-    # Log full data at DEBUG level
-    logger.debug(f"Full heartbeat data: {data}")
-    
-    logger.info("="*70)
-    
-    # Return success response
-    return Response({
-        'status': 'success',
-        'message': 'Heartbeat received and authenticated',
-        'timestamp': datetime.now(),
-        'agent': {
-            'agent_id': agent_token.agent_id,
-            'agent_name': agent_token.agent_name,
-        },
-        'received_data': {
-            'hostname': data.get('hostname'),
-            'os_type': data.get('os_type'),
-            'services_count': len(data.get('services', [])),
-            'software_count': len(data.get('installed_software', [])),
+    # Get or create device
+    device, created = Device.objects.get_or_create(
+        agent_token=agent_token,
+        defaults={
+            'hostname': data['hostname'],
+            'os_type': data['os_type'],
+            'os_version': data['os_version'],
+            'cpu_info': data['cpu_info'],
+            'memory_total': data['memory_total'],
+            'memory_available': data['memory_available'],
+            'ip_addresses': data.get('ip_addresses', {}),
+            'is_online': True,
         }
-    }, status=status.HTTP_200_OK)
+    )
+    
+    if created:
+        logger.info(f"✓ New device created: {device.hostname}")
+    else:
+        # Update existing device
+        device.hostname = data['hostname']
+        device.os_type = data['os_type']
+        device.os_version = data['os_version']
+        device.cpu_info = data['cpu_info']
+        device.memory_total = data['memory_total']
+        device.memory_available = data['memory_available']
+        device.ip_addresses = data.get('ip_addresses', {})
+        device.is_online = True
+        device.last_heartbeat = timezone.now()
+        device.save()
+        logger.info(f"✓ Device updated: {device.hostname}")
+    
+    # Process services
+    services_stats = process_services(device, data.get('services', []))
+    
+    # Process software
+    software_stats = process_software(device, data.get('installed_software', []))
+    
+    return device, services_stats, software_stats
+
+
+def process_services(device, service_names):
+    """
+    Process services list and update database
+    Returns: {'active': count, 'inactive': count}
+    """
+    logger.debug(f"Processing {len(service_names)} services")
+    
+    # Track current services
+    current_services = set(service_names)
+    
+    # Update or create services
+    active_count = 0
+    for service_name in current_services:
+        service, created = DeviceService.objects.get_or_create(
+            device=device,
+            service_name=service_name,
+            defaults={'is_active': True}
+        )
+        
+        if not created:
+            # Update existing service
+            service.is_active = True
+            service.last_seen = timezone.now()
+            service.save(update_fields=['is_active', 'last_seen'])
+        
+        active_count += 1
+    
+    # Mark services NOT in current list as inactive
+    inactive_count = DeviceService.objects.filter(
+        device=device,
+        is_active=True
+    ).exclude(
+        service_name__in=current_services
+    ).update(is_active=False)
+    
+    logger.debug(f"✓ Services processed: {active_count} active, {inactive_count} deactivated")
+    
+    return {
+        'active': active_count,
+        'inactive': inactive_count
+    }
+
+
+def process_software(device, software_names):
+    """
+    Process software list and update database
+    Returns: {'installed': count, 'uninstalled': count}
+    """
+    logger.debug(f"Processing {len(software_names)} software items")
+    
+    # Track current software
+    current_software = set(software_names)
+    
+    # Update or create software
+    installed_count = 0
+    for software_name in current_software:
+        software, created = DeviceSoftware.objects.get_or_create(
+            device=device,
+            software_name=software_name,
+            defaults={'is_installed': True}
+        )
+        
+        if not created:
+            # Update existing software
+            software.is_installed = True
+            software.last_seen = timezone.now()
+            software.save(update_fields=['is_installed', 'last_seen'])
+        
+        installed_count += 1
+    
+    # Mark software NOT in current list as uninstalled
+    uninstalled_count = DeviceSoftware.objects.filter(
+        device=device,
+        is_installed=True
+    ).exclude(
+        software_name__in=current_software
+    ).update(is_installed=False)
+    
+    logger.debug(f"✓ Software processed: {installed_count} installed, {uninstalled_count} uninstalled")
+    
+    return {
+        'installed': installed_count,
+        'uninstalled': uninstalled_count
+    }
+
 
 @api_view(['GET'])
 def health_check(request):
@@ -102,6 +232,6 @@ def health_check(request):
     
     return Response({
         'status': 'healthy',
-        'timestamp': datetime.now(),
-        'version': '1.0.0',
+        'timestamp': datetime.utcnow().isoformat(),
+        'version': '2.0.0',  # Phase 3
     }, status=status.HTTP_200_OK)
