@@ -279,3 +279,110 @@ def list_tokens(request):
             for token in tokens
         ]
     }, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def list_registrations(request):
+    """
+    List all registration requests.
+
+    GET /api/agents/registrations/
+    """
+    registrations = PendingRegistration.objects.all()
+
+    return Response({
+        'status': 'success',
+        'count': registrations.count(),
+        'registrations': [
+            {
+                'id': reg.id,
+                'agent_id': reg.agent_id,
+                'agent_name': reg.agent_name,
+                'hostname': reg.hostname,
+                'os_type': reg.os_type,
+                'os_version': reg.os_version,
+                'status': reg.status,
+                'requested_at': reg.requested_at,
+                'approved_at': reg.approved_at,
+            }
+            for reg in registrations
+        ]
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def approve_registration(request, pk):
+    """
+    Approve a pending registration.
+
+    POST /api/agents/registrations/<pk>/approve/
+    """
+    try:
+        registration = PendingRegistration.objects.get(pk=pk)
+    except PendingRegistration.DoesNotExist:
+        return Response(
+            {'error': 'Registration not found'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if registration.status != 'pending':
+        return Response(
+            {'error': f'Registration is already {registration.status}'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        token = registration.approve(request.user)
+        logger.info(f"Registration approved: {registration.agent_id} by {request.user.username}")
+        return Response({
+            'status': 'success',
+            'message': 'Registration approved',
+            'agent_id': registration.agent_id,
+            'token': token.token,
+        })
+    except Exception as e:
+        logger.exception(f"Failed to approve registration: {e}")
+        return Response(
+            {'error': 'Approval failed', 'details': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
+
+
+@api_view(['POST'])
+@permission_classes([IsAdminUser])
+def reject_registration(request, pk):
+    """
+    Reject a pending registration.
+
+    POST /api/agents/registrations/<pk>/reject/
+    """
+    try:
+        registration = PendingRegistration.objects.get(pk=pk)
+    except PendingRegistration.DoesNotExist:
+        return Response(
+            {'error': 'Registration not found'},
+            status=status.HTTP_404_NOT_FOUND,
+        )
+
+    if registration.status != 'pending':
+        return Response(
+            {'error': f'Registration is already {registration.status}'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    try:
+        registration.reject()
+        logger.info(f"Registration rejected: {registration.agent_id} by {request.user.username}")
+        return Response({
+            'status': 'success',
+            'message': 'Registration rejected',
+            'agent_id': registration.agent_id,
+        })
+    except Exception as e:
+        logger.exception(f"Failed to reject registration: {e}")
+        return Response(
+            {'error': 'Rejection failed', 'details': str(e)},
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        )
