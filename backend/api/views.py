@@ -1,8 +1,9 @@
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAdminUser
 from agents.authentication import AgentTokenAuthentication
+from agents.models import PendingRegistration
 from devices.serializers import HeartbeatSerializer
 from devices.models import Device, DeviceService, DeviceSoftware
 from datetime import datetime
@@ -229,9 +230,31 @@ def process_software(device, software_names):
 def health_check(request):
     """Simple health check endpoint - no authentication required"""
     logger.debug("Health check requested")
-    
+
     return Response({
         'status': 'healthy',
         'timestamp': datetime.utcnow().isoformat(),
         'version': '2.0.0',  # Phase 3
     }, status=status.HTTP_200_OK)
+
+
+@api_view(['GET'])
+@permission_classes([IsAdminUser])
+def dashboard_stats(request):
+    """
+    Aggregate statistics for the frontend dashboard.
+
+    GET /api/dashboard/
+    """
+    total_devices = Device.objects.count()
+    online_devices = Device.objects.filter(is_online=True).count()
+    offline_devices = total_devices - online_devices
+    pending_registrations = PendingRegistration.objects.filter(status='pending').count()
+
+    return Response({
+        'status': 'success',
+        'total_devices': total_devices,
+        'online_devices': online_devices,
+        'offline_devices': offline_devices,
+        'pending_registrations': pending_registrations,
+    })
