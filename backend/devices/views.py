@@ -1,7 +1,7 @@
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import IsAdminUser
+from rest_framework.permissions import IsAuthenticated
 from .models import Device, DeviceService, DeviceSoftware
 from .serializers import DeviceSerializer, DeviceServiceSerializer, DeviceSoftwareSerializer
 import logging
@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 
 @api_view(['GET'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 def list_devices(request):
     """
     List all devices.
@@ -27,7 +27,7 @@ def list_devices(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 def device_detail(request, pk):
     """
     Get a single device by ID.
@@ -47,7 +47,7 @@ def device_detail(request, pk):
 
 
 @api_view(['GET'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 def device_services(request, pk):
     """
     List services for a device.
@@ -72,7 +72,7 @@ def device_services(request, pk):
 
 
 @api_view(['GET'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 def device_software(request, pk):
     """
     List software for a device.

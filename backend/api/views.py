@@ -1,7 +1,9 @@
 from rest_framework.decorators import api_view, authentication_classes, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import AllowAny, IsAdminUser
+from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.authtoken.models import Token
+from django.contrib.auth import authenticate
 from agents.authentication import AgentTokenAuthentication
 from agents.models import PendingRegistration
 from devices.serializers import HeartbeatSerializer
@@ -238,8 +240,71 @@ def health_check(request):
     }, status=status.HTTP_200_OK)
 
 
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def login(request):
+    """
+    Authenticate user and return a DRF token.
+
+    POST /api/auth/login/
+    {"username": "...", "password": "..."}
+    """
+    username = request.data.get('username')
+    password = request.data.get('password')
+
+    if not username or not password:
+        return Response(
+            {'error': 'Username and password are required'},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    user = authenticate(username=username, password=password)
+    if user is None:
+        return Response(
+            {'error': 'Invalid credentials'},
+            status=status.HTTP_401_UNAUTHORIZED,
+        )
+
+    token, _ = Token.objects.get_or_create(user=user)
+    return Response({
+        'token': token.key,
+        'user': {
+            'id': user.id,
+            'username': user.username,
+            'is_staff': user.is_staff,
+        },
+    })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def logout(request):
+    """
+    Delete the caller's DRF token.
+
+    POST /api/auth/logout/
+    """
+    Token.objects.filter(user=request.user).delete()
+    return Response({'status': 'success'})
+
+
 @api_view(['GET'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
+def me(request):
+    """
+    Return the currently authenticated user.
+
+    GET /api/auth/me/
+    """
+    return Response({
+        'id': request.user.id,
+        'username': request.user.username,
+        'is_staff': request.user.is_staff,
+    })
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
 def dashboard_stats(request):
     """
     Aggregate statistics for the frontend dashboard.
