@@ -1,9 +1,18 @@
 <script setup>
 import { useRegistrationStore } from '@/stores/registrations'
+import { useAuthStore } from '@/stores/auth'
+import { useRouter } from 'vue-router'
 import { computed } from 'vue'
 
 const registrationStore = useRegistrationStore()
+const authStore = useAuthStore()
+const router = useRouter()
 const pendingCount = computed(() => registrationStore.pendingCount)
+
+async function handleLogout() {
+  await authStore.logout()
+  router.push('/login')
+}
 </script>
 
 <template>
@@ -29,6 +38,11 @@ const pendingCount = computed(() => registrationStore.pendingCount)
         <span v-if="pendingCount > 0" class="badge">{{ pendingCount }}</span>
       </router-link>
     </nav>
+
+    <div class="sidebar-footer">
+      <div class="user-info">{{ authStore.user?.username }}</div>
+      <button class="logout-btn" @click="handleLogout">Sign out</button>
+    </div>
   </aside>
 </template>
 
@@ -98,5 +112,36 @@ const pendingCount = computed(() => registrationStore.pendingCount)
   font-weight: 600;
   padding: 2px 8px;
   border-radius: 10px;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding: 16px;
+  border-top: 1px solid var(--border-color);
+}
+
+.user-info {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.logout-btn {
+  width: 100%;
+  padding: 8px;
+  background: none;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-family: inherit;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.logout-btn:hover {
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger);
+  border-color: var(--color-danger);
 }
 </style>

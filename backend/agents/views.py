@@ -1,7 +1,7 @@
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework import status
-from rest_framework.permissions import AllowAny, IsAdminUser
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from .models import AgentToken, PendingRegistration
 import logging
 
@@ -205,7 +205,7 @@ def check_registration(request, agent_id):
 
 
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 def create_token(request):
     """
     Manual token creation by admin (legacy method)
@@ -254,7 +254,7 @@ def create_token(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 def list_tokens(request):
     """
     List all agent tokens
@@ -282,7 +282,7 @@ def list_tokens(request):
 
 
 @api_view(['GET'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 def list_registrations(request):
     """
     List all registration requests.
@@ -312,7 +312,7 @@ def list_registrations(request):
 
 
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 def approve_registration(request, pk):
     """
     Approve a pending registration.
@@ -351,7 +351,7 @@ def approve_registration(request, pk):
 
 
 @api_view(['POST'])
-@permission_classes([IsAdminUser])
+@permission_classes([IsAuthenticated])
 def reject_registration(request, pk):
     """
     Reject a pending registration.
