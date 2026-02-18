@@ -10,6 +10,10 @@ from devices.serializers import HeartbeatSerializer
 from devices.models import Device, DeviceService, DeviceSoftware
 from datetime import datetime
 from django.utils import timezone
+from api.broadcast import (
+    broadcast_device_update, broadcast_device_services,
+    broadcast_device_software, broadcast_dashboard_stats,
+)
 import logging
 
 logger = logging.getLogger(__name__)
@@ -70,7 +74,13 @@ def heartbeat(request):
         logger.info(f"✓ Services: {services_stats['active']} active")
         logger.info(f"✓ Software: {software_stats['installed']} installed")
         logger.info("="*70)
-        
+
+        # Broadcast real-time updates
+        broadcast_device_update(device)
+        broadcast_device_services(device)
+        broadcast_device_software(device)
+        broadcast_dashboard_stats()
+
         return Response({
             'status': 'success',
             'message': 'Heartbeat received and stored',

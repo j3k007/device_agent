@@ -1,22 +1,37 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useDeviceStore } from '@/stores/devices'
+import { useDeviceSocket } from '@/composables/useDeviceSocket'
 import deviceService from '@/services/deviceService'
 
 const route = useRoute()
 const deviceStore = useDeviceStore()
 const services = ref([])
 const software = ref([])
+const deviceId = route.params.id
+
+const {
+  connected,
+  services: liveServices,
+  software: liveSoftware,
+} = useDeviceSocket(deviceId)
+
+// Apply live updates when they arrive
+watch(liveServices, (val) => {
+  if (val) services.value = val
+})
+watch(liveSoftware, (val) => {
+  if (val) software.value = val
+})
 
 onMounted(async () => {
-  const id = route.params.id
-  await deviceStore.fetchDevice(id)
+  await deviceStore.fetchDevice(deviceId)
 
   try {
     const [servicesRes, softwareRes] = await Promise.all([
-      deviceService.getDeviceServices(id),
-      deviceService.getDeviceSoftware(id),
+      deviceService.getDeviceServices(deviceId),
+      deviceService.getDeviceSoftware(deviceId),
     ])
     services.value = servicesRes.data.services || servicesRes.data
     software.value = softwareRes.data.software || softwareRes.data
@@ -51,6 +66,9 @@ function formatBytes(bytes) {
           :class="deviceStore.currentDevice.is_online ? 'online' : 'offline'"
         >
           {{ deviceStore.currentDevice.is_online ? 'Online' : 'Offline' }}
+        </span>
+        <span class="ws-status" :class="connected ? 'ws-connected' : 'ws-disconnected'">
+          {{ connected ? 'Live' : 'Connecting...' }}
         </span>
       </div>
 
@@ -230,5 +248,22 @@ dd {
   color: var(--color-danger);
   padding: 12px 16px;
   border-radius: 8px;
+}
+
+.ws-status {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 10px;
+}
+
+.ws-connected {
+  background-color: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.ws-disconnected {
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning);
 }
 </style>
