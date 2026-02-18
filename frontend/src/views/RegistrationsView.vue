@@ -1,8 +1,10 @@
 <script setup>
 import { onMounted } from 'vue'
 import { useRegistrationStore } from '@/stores/registrations'
+import { useDashboardSocket } from '@/composables/useDashboardSocket'
 
 const registrationStore = useRegistrationStore()
+const { connected } = useDashboardSocket()
 
 onMounted(() => {
   registrationStore.fetchRegistrations()
@@ -19,7 +21,12 @@ function statusClass(status) {
 
 <template>
   <div class="registrations-page">
-    <h2 class="page-title">Registrations</h2>
+    <div class="page-header">
+      <h2 class="page-title">Registrations</h2>
+      <span class="ws-status" :class="connected ? 'ws-connected' : 'ws-disconnected'">
+        {{ connected ? 'Live' : 'Connecting...' }}
+      </span>
+    </div>
 
     <div v-if="registrationStore.loading" class="loading">Loading registrations...</div>
 
@@ -75,11 +82,35 @@ function statusClass(status) {
   max-width: 1200px;
 }
 
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
 .page-title {
   font-size: 1.5rem;
   font-weight: 700;
   color: var(--text-primary);
-  margin: 0 0 24px 0;
+  margin: 0;
+}
+
+.ws-status {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 10px;
+}
+
+.ws-connected {
+  background-color: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.ws-disconnected {
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning);
 }
 
 .reg-table {

@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from .models import AgentToken, PendingRegistration
+from api.broadcast import broadcast_registration_created, broadcast_registration_updated
 import logging
 
 logger = logging.getLogger(__name__)
@@ -115,7 +116,9 @@ def register_device(request):
         
         logger.info(f"✓ Registration request created: {agent_id}")
         logger.info("="*70)
-        
+
+        broadcast_registration_created(registration)
+
         return Response(
             {
                 'status': 'pending',
@@ -336,6 +339,7 @@ def approve_registration(request, pk):
     try:
         token = registration.approve(request.user)
         logger.info(f"Registration approved: {registration.agent_id} by {request.user.username}")
+        broadcast_registration_updated(registration)
         return Response({
             'status': 'success',
             'message': 'Registration approved',
@@ -375,6 +379,7 @@ def reject_registration(request, pk):
     try:
         registration.reject()
         logger.info(f"Registration rejected: {registration.agent_id} by {request.user.username}")
+        broadcast_registration_updated(registration)
         return Response({
             'status': 'success',
             'message': 'Registration rejected',

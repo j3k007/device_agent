@@ -42,6 +42,19 @@ export const useDeviceStore = defineStore('devices', () => {
     }
   }
 
+  function applyDeviceUpdate(device) {
+    const idx = devices.value.findIndex((d) => d.id === device.id)
+    if (idx !== -1) {
+      devices.value[idx] = { ...devices.value[idx], ...device }
+    } else {
+      devices.value.unshift(device)
+    }
+
+    if (currentDevice.value && currentDevice.value.id === device.id) {
+      currentDevice.value = { ...currentDevice.value, ...device }
+    }
+  }
+
   return {
     devices,
     currentDevice,
@@ -51,5 +64,6 @@ export const useDeviceStore = defineStore('devices', () => {
     offlineDevices,
     fetchDevices,
     fetchDevice,
+    applyDeviceUpdate,
   }
 })

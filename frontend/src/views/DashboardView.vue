@@ -1,11 +1,26 @@
 <script setup>
-import { onMounted } from 'vue'
+import { onMounted, computed } from 'vue'
 import { useDeviceStore } from '@/stores/devices'
 import { useRegistrationStore } from '@/stores/registrations'
+import { useDashboardSocket } from '@/composables/useDashboardSocket'
 import StatsCard from '@/components/dashboard/StatsCard.vue'
 
 const deviceStore = useDeviceStore()
 const registrationStore = useRegistrationStore()
+const { connected, dashboardStats } = useDashboardSocket()
+
+const totalDevices = computed(() =>
+  dashboardStats.value?.total_devices ?? deviceStore.devices.length
+)
+const onlineDevices = computed(() =>
+  dashboardStats.value?.online_devices ?? deviceStore.onlineDevices.length
+)
+const offlineDevices = computed(() =>
+  dashboardStats.value?.offline_devices ?? deviceStore.offlineDevices.length
+)
+const pendingRegistrations = computed(() =>
+  dashboardStats.value?.pending_registrations ?? registrationStore.pendingCount
+)
 
 onMounted(() => {
   deviceStore.fetchDevices()
@@ -15,29 +30,34 @@ onMounted(() => {
 
 <template>
   <div class="dashboard">
-    <h2 class="page-title">Dashboard</h2>
+    <div class="page-header">
+      <h2 class="page-title">Dashboard</h2>
+      <span class="ws-status" :class="connected ? 'ws-connected' : 'ws-disconnected'">
+        {{ connected ? 'Live' : 'Connecting...' }}
+      </span>
+    </div>
 
     <div class="stats-grid">
       <StatsCard
         label="Total Devices"
-        :value="deviceStore.devices.length"
+        :value="totalDevices"
         :loading="deviceStore.loading"
       />
       <StatsCard
         label="Online"
-        :value="deviceStore.onlineDevices.length"
+        :value="onlineDevices"
         :loading="deviceStore.loading"
         variant="success"
       />
       <StatsCard
         label="Offline"
-        :value="deviceStore.offlineDevices.length"
+        :value="offlineDevices"
         :loading="deviceStore.loading"
         variant="danger"
       />
       <StatsCard
         label="Pending Registrations"
-        :value="registrationStore.pendingCount"
+        :value="pendingRegistrations"
         :loading="registrationStore.loading"
         variant="warning"
       />
@@ -54,11 +74,35 @@ onMounted(() => {
   max-width: 1200px;
 }
 
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
 .page-title {
   font-size: 1.5rem;
   font-weight: 700;
   color: var(--text-primary);
-  margin: 0 0 24px 0;
+  margin: 0;
+}
+
+.ws-status {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 10px;
+}
+
+.ws-connected {
+  background-color: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.ws-disconnected {
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning);
 }
 
 .stats-grid {

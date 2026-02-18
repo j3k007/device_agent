@@ -1,9 +1,11 @@
 <script setup>
 import { onMounted } from 'vue'
 import { useDeviceStore } from '@/stores/devices'
+import { useDashboardSocket } from '@/composables/useDashboardSocket'
 import DeviceCard from '@/components/devices/DeviceCard.vue'
 
 const deviceStore = useDeviceStore()
+const { connected } = useDashboardSocket()
 
 onMounted(() => {
   deviceStore.fetchDevices()
@@ -12,7 +14,12 @@ onMounted(() => {
 
 <template>
   <div class="devices-page">
-    <h2 class="page-title">Devices</h2>
+    <div class="page-header">
+      <h2 class="page-title">Devices</h2>
+      <span class="ws-status" :class="connected ? 'ws-connected' : 'ws-disconnected'">
+        {{ connected ? 'Live' : 'Connecting...' }}
+      </span>
+    </div>
 
     <div v-if="deviceStore.loading" class="loading">Loading devices...</div>
 
@@ -39,11 +46,35 @@ onMounted(() => {
   max-width: 1200px;
 }
 
+.page-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
 .page-title {
   font-size: 1.5rem;
   font-weight: 700;
   color: var(--text-primary);
-  margin: 0 0 24px 0;
+  margin: 0;
+}
+
+.ws-status {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 10px;
+}
+
+.ws-connected {
+  background-color: var(--color-success-bg);
+  color: var(--color-success);
+}
+
+.ws-disconnected {
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning);
 }
 
 .devices-grid {

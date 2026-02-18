@@ -42,6 +42,20 @@ export const useRegistrationStore = defineStore('registrations', () => {
     }
   }
 
+  function addRegistration(registration) {
+    const exists = registrations.value.some((r) => r.id === registration.id)
+    if (!exists) {
+      registrations.value.unshift(registration)
+    }
+  }
+
+  function updateRegistration(registration) {
+    const idx = registrations.value.findIndex((r) => r.id === registration.id)
+    if (idx !== -1) {
+      registrations.value[idx] = { ...registrations.value[idx], ...registration }
+    }
+  }
+
   return {
     registrations,
     loading,
@@ -50,5 +64,7 @@ export const useRegistrationStore = defineStore('registrations', () => {
     fetchRegistrations,
     approve,
     reject,
+    addRegistration,
+    updateRegistration,
   }
 })
